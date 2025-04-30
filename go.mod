@@ -1,4 +1,4 @@
-module deepl-test
+module cctr
 
 go 1.24
 
