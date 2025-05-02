@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/jedib0t/go-pretty/v6/progress"
 	"github.com/jedib0t/go-pretty/v6/table"
 	"os"
 	"time"
@@ -99,8 +100,41 @@ func translate() *cli.Command {
 			chunks := SplitByMaxBytes(toTranslate, 10000)
 			fmt.Println("Text split into chunks: ", len(chunks))
 
+			// Initialize progress bar
+			pw := progress.NewWriter()
+			pw.SetOutputWriter(os.Stdout)
+			pw.SetAutoStop(false)
+			pw.SetTrackerLength(25)
+			pw.SetMessageWidth(24)
+			pw.SetNumTrackersExpected(1)
+			pw.SetSortBy(progress.SortByPercentDsc)
+			pw.SetStyle(progress.StyleDefault)
+			pw.SetTrackerPosition(progress.PositionRight)
+			pw.SetUpdateFrequency(time.Millisecond * 100)
+			pw.Style().Options.PercentFormat = "%4.1f%%"
+			pw.Style().Visibility.ETA = true
+			pw.Style().Visibility.ETAOverall = false
+			pw.Style().Visibility.Speed = true
+			pw.Style().Visibility.SpeedOverall = false
+			pw.Style().Visibility.Time = true
+			pw.Style().Visibility.TrackerOverall = true
+			pw.Style().Visibility.Value = true
+			pw.Style().Visibility.Pinned = true
+
+			// Create a tracker for translation progress
+			totalChunks := int64(len(chunks))
+			translationTracker := progress.Tracker{
+				Message: "Translating chunks",
+				Total:   totalChunks,
+				Units:   progress.UnitsDefault,
+			}
+			pw.AppendTracker(&translationTracker)
+
+			// Start the progress writer in a separate goroutine
+			go pw.Render()
+
+			// Translate chunks and update progress
 			for i, ch := range chunks {
-				fmt.Printf("Translating chunk %d/%d\n", i+1, len(chunks))
 				translations, err := translator.TranslateText(ch, c.String("lang"))
 				if err != nil {
 					return err
@@ -108,7 +142,13 @@ func translate() *cli.Command {
 				for it, t := range translations {
 					chunks[i][it] = t.Text
 				}
+				translationTracker.Increment(1)
 			}
+
+			// Mark tracker as complete and stop the progress writer
+			translationTracker.MarkAsDone()
+			pw.Stop()
+			time.Sleep(time.Millisecond * 100) // Give time for the final render
 
 			for i, t := range MergeChunks(chunks) {
 				locale.Tokens[i].Value = t
