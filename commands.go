@@ -133,16 +133,22 @@ func translate() *cli.Command {
 			// Start the progress writer in a separate goroutine
 			go pw.Render()
 
+			var skipped int
 			// Translate chunks and update progress
 			for i, ch := range chunks {
 				translations, err := translator.TranslateText(ch, c.String("lang"))
 				if err != nil {
-					return err
+					skipped++
+					continue
 				}
 				for it, t := range translations {
 					chunks[i][it] = t.Text
 				}
 				translationTracker.Increment(1)
+			}
+
+			if skipped > 0 {
+				fmt.Printf("Skipped %d chunks due to API errors\nSaving with partial translation if possible\n", skipped)
 			}
 
 			// Mark tracker as complete and stop the progress writer
@@ -164,6 +170,7 @@ func translate() *cli.Command {
 			if err != nil {
 				return err
 			}
+			fmt.Println("Done!")
 			return nil
 		},
 	}
